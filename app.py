@@ -1,7 +1,7 @@
 import streamlit as st
-import tensorflow as tf
-import numpy as np
+import tensorflow as tf  # This matches the library in requirements.txt
 from PIL import Image
+import numpy as np
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="PlantPatrol AI", page_icon="🌿", layout="centered")
