@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<body>
+    <h2>🌱 Plant Disease Detector</h2>
+    <input type="file" id="imageUpload" accept="image/*">
+    <button onclick="analyze()">Scan Leaf</button>
+    <p id="result">Result will appear here...</p>
+
+    <script>
+        async function analyze() {
+            const fileInput = document.getElementById('imageUpload');
+            const resultText = document.getElementById('result');
+            
+            if (fileInput.files.length === 0) return alert("Select a photo!");
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            resultText.innerText = "Analyzing... 🔍";
+
+            // Replace YOUR_CLOUD_URL with the link Google gives you in Step 5
+            const response = await fetch('YOUR_CLOUD_URL/predict', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+            resultText.innerHTML = `<b>Result:</b> ${data.diagnosis} (${data.confidence})`;
+        }
+    </script>
+</body>
+</html>
