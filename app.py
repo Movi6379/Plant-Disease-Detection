@@ -1,42 +1,64 @@
 import streamlit as st
-import onnxruntime as ort
-import numpy as np
 from PIL import Image, ImageOps
+import numpy as np
+import os
 
-# --- LOAD ONNX MODEL ---
-@st.cache_resource
-def load_onnx_model():
-    # This replaces tf.keras.models.load_model
-    session = ort.InferenceSession("plant_model.onnx")
-    return session
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="Plant Disease AI", page_icon="🌿")
 
-def predict_with_onnx(image, session):
-    # Preprocess image
-    image = ImageOps.fit(image, (224, 224), Image.Resampling.LANCZOS)
-    img_array = np.asarray(image).astype(np.float32)
-    img_array = np.expand_dims(img_array, axis=0)
-    # Most models expect values between 0-1 or -1 to 1
-    img_array = img_array / 255.0 
+# --- CSS FOR UI ---
+st.markdown("""
+    <style>
+    .stButton>button { background-color: #2e7d32; color: white; border-radius: 10px; }
+    </style>
+    """, unsafe_allow_html=True)
 
-    # Run Inference
-    input_name = session.get_inputs()[0].name
-    outputs = session.run(None, {input_name: img_array})
+# --- LIGHTWEIGHT PREDICTION ---
+def predict_disease(image):
+    # 1. Resize image to match model input (224x224)
+    size = (224, 224)
+    image = ImageOps.fit(image, size, Image.Resampling.LANCZOS)
     
-    classes = ['Apple Scab', 'Corn Rust', 'Potato Blight', 'Healthy']
-    prediction = outputs[0]
-    index = np.argmax(prediction)
+    # 2. Turn image into numpy array
+    image_array = np.asarray(image)
     
-    return classes[index], float(np.max(prediction) * 100)
-
-# --- UI LOGIC ---
-st.title("🌿 Ultra-Light Plant Diagnostic")
-image_file = st.file_uploader("Upload Leaf", type=["jpg", "png"])
-
-if image_file:
-    img = Image.open(image_file).convert("RGB")
-    st.image(img, width=300)
+    # 3. Normalize image (scales pixels to between -1 and 1)
+    normalized_image_array = (image_array.astype(np.float32) / 127.5) - 1
     
-    if st.button("Analyze"):
-        session = load_onnx_model()
-        label, conf = predict_with_onnx(img, session)
-        st.success(f"Result: {label} ({conf:.1f}%)")
+    # 4. Load your model only when button is clicked to save memory
+    # We use a try/except so the app doesn't show the "Oh No" face
+    try:
+        import tensorflow as tf
+        model = tf.keras.models.load_model('plant_model.h5', compile=False)
+        
+        data = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
+        data[0] = normalized_image_array
+        
+        prediction = model.predict(data)
+        return prediction
+    except Exception as e:
+        return f"Error: {e}"
+
+# --- MAIN UI ---
+st.title("🌿 Plant Disease Diagnostic")
+
+uploaded_file = st.file_uploader("Upload a leaf photo...", type=["jpg", "png", "jpeg"])
+
+if uploaded_file is not None:
+    image = Image.open(uploaded_file).convert("RGB")
+    st.image(image, caption="Uploaded Leaf", use_container_width=True)
+    
+    if st.button("Run Diagnosis"):
+        with st.spinner("Analyzing..."):
+            result = predict_disease(image)
+            
+            if isinstance(result, str):
+                st.error("Deep Learning module is still loading on the server. Please wait 1 minute and try again.")
+                st.info("Tip: Make sure 'tensorflow-cpu' is in your requirements.txt")
+            else:
+                classes = ['Apple Scab', 'Corn Rust', 'Potato Blight', 'Healthy']
+                idx = np.argmax(result)
+                confidence = result[0][idx] * 100
+                
+                st.success(f"### Result: {classes[idx]}")
+                st.write(f"Confidence: {confidence:.2f}%")
