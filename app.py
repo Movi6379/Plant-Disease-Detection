@@ -1,5 +1,5 @@
 import streamlit as st
-import tensorflow as tf  # This matches the library in requirements.txt
+import tensorflow as tf
 from PIL import Image
 import numpy as np
 
@@ -16,19 +16,20 @@ st.markdown("""
 
 # --- LOAD MODEL ---
 @st.cache_resource
-def load_model():
-    # Replace 'plant_model.h5' with your actual file name
+def load_plant_model():
+    # Ensure 'plant_model.h5' is uploaded to your GitHub repo
     model = tf.keras.models.load_model('plant_model.h5')
     return model
 
 # --- PREDICTION LOGIC ---
 def predict_disease(image, model):
-    img = image.resize((224, 224)) # Standard size for MobileNet/ResNet
+    # Convert image to RGB (important if someone uploads a PNG with transparency)
+    img = image.convert("RGB")
+    img = img.resize((224, 224)) 
     img_array = np.array(img) / 255.0
     img_array = np.expand_dims(img_array, axis=0)
     
     predictions = model.predict(img_array)
-    # Define your classes here in the exact order they were trained
     classes = ['Apple Scab', 'Corn Rust', 'Potato Blight', 'Healthy']
     
     result = classes[np.argmax(predictions)]
@@ -39,12 +40,10 @@ def predict_disease(image, model):
 st.title("🌿 Plant Disease Diagnostic")
 st.write("Instant AI diagnosis for small-scale farmers.")
 
-# Sidebar for instructions
 with st.sidebar:
     st.header("How to use")
-    st.info("1. Upload a clear photo of a leaf.\n2. Ensure the infection is visible.\n3. Get the diagnosis and treatment.")
+    st.info("1. Upload a clear photo.\n2. Ensure infection is visible.\n3. Get diagnosis.")
 
-# Input: Camera or File Upload
 tab1, tab2 = st.tabs(["📸 Take Photo", "📁 Upload Image"])
 
 with tab1:
@@ -60,17 +59,18 @@ if input_image:
     st.image(image, caption="Current Scan", use_container_width=True)
     
     if st.button("Diagnose Disease"):
-        with st.spinner('Analyzing patterns...'):
-            model = load_model()
-            label, score = predict_disease(image, model)
-            
-            # Display Results
-            st.success(f"### Result: {label}")
-            st.write(f"**AI Confidence:** {score:.2f}%")
-            
-            # Contextual Advice
-            if label != 'Healthy':
-                st.warning("⚠️ **Treatment:** Isolate the plant and apply organic fungicide.")
-            else:
-                st.balloons()
-                st.info("✅ Your plant looks healthy! Keep up the good work.")
+        try:
+            with st.spinner('Analyzing patterns...'):
+                model = load_plant_model()
+                label, score = predict_disease(image, model)
+                
+                st.success(f"### Result: {label}")
+                st.write(f"**AI Confidence:** {score:.2f}%")
+                
+                if label != 'Healthy':
+                    st.warning("⚠️ **Treatment:** Isolate the plant and apply organic fungicide.")
+                else:
+                    st.balloons()
+                    st.info("✅ Your plant looks healthy!")
+        except Exception as e:
+            st.error(f"Error: {e}. Make sure 'plant_model.h5' is in your GitHub repo.")
