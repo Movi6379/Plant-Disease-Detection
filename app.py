@@ -1,76 +1,42 @@
 import streamlit as st
-import tensorflow as tf
-from PIL import Image
+import onnxruntime as ort
 import numpy as np
+from PIL import Image, ImageOps
 
-# --- PAGE CONFIG ---
-st.set_page_config(page_title="PlantPatrol AI", page_icon="🌿", layout="centered")
-
-# --- CUSTOM STYLING ---
-st.markdown("""
-    <style>
-    .main { background-color: #f5f7f9; }
-    .stButton>button { width: 100%; border-radius: 20px; height: 3em; background-color: #2e7d32; color: white; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- LOAD MODEL ---
+# --- LOAD ONNX MODEL ---
 @st.cache_resource
-def load_plant_model():
-    # Ensure 'plant_model.h5' is uploaded to your GitHub repo
-    model = tf.keras.models.load_model('plant_model.h5')
-    return model
+def load_onnx_model():
+    # This replaces tf.keras.models.load_model
+    session = ort.InferenceSession("plant_model.onnx")
+    return session
 
-# --- PREDICTION LOGIC ---
-def predict_disease(image, model):
-    # Convert image to RGB (important if someone uploads a PNG with transparency)
-    img = image.convert("RGB")
-    img = img.resize((224, 224)) 
-    img_array = np.array(img) / 255.0
+def predict_with_onnx(image, session):
+    # Preprocess image
+    image = ImageOps.fit(image, (224, 224), Image.Resampling.LANCZOS)
+    img_array = np.asarray(image).astype(np.float32)
     img_array = np.expand_dims(img_array, axis=0)
+    # Most models expect values between 0-1 or -1 to 1
+    img_array = img_array / 255.0 
+
+    # Run Inference
+    input_name = session.get_inputs()[0].name
+    outputs = session.run(None, {input_name: img_array})
     
-    predictions = model.predict(img_array)
     classes = ['Apple Scab', 'Corn Rust', 'Potato Blight', 'Healthy']
+    prediction = outputs[0]
+    index = np.argmax(prediction)
     
-    result = classes[np.argmax(predictions)]
-    confidence = np.max(predictions) * 100
-    return result, confidence
+    return classes[index], float(np.max(prediction) * 100)
 
-# --- APP UI ---
-st.title("🌿 Plant Disease Diagnostic")
-st.write("Instant AI diagnosis for small-scale farmers.")
+# --- UI LOGIC ---
+st.title("🌿 Ultra-Light Plant Diagnostic")
+image_file = st.file_uploader("Upload Leaf", type=["jpg", "png"])
 
-with st.sidebar:
-    st.header("How to use")
-    st.info("1. Upload a clear photo.\n2. Ensure infection is visible.\n3. Get diagnosis.")
-
-tab1, tab2 = st.tabs(["📸 Take Photo", "📁 Upload Image"])
-
-with tab1:
-    camera_image = st.camera_input("Scan your plant leaf")
-
-with tab2:
-    uploaded_file = st.file_uploader("Choose a leaf image...", type=["jpg", "jpeg", "png"])
-
-input_image = camera_image or uploaded_file
-
-if input_image:
-    image = Image.open(input_image)
-    st.image(image, caption="Current Scan", use_container_width=True)
+if image_file:
+    img = Image.open(image_file).convert("RGB")
+    st.image(img, width=300)
     
-    if st.button("Diagnose Disease"):
-        try:
-            with st.spinner('Analyzing patterns...'):
-                model = load_plant_model()
-                label, score = predict_disease(image, model)
-                
-                st.success(f"### Result: {label}")
-                st.write(f"**AI Confidence:** {score:.2f}%")
-                
-                if label != 'Healthy':
-                    st.warning("⚠️ **Treatment:** Isolate the plant and apply organic fungicide.")
-                else:
-                    st.balloons()
-                    st.info("✅ Your plant looks healthy!")
-        except Exception as e:
-            st.error(f"Error: {e}. Make sure 'plant_model.h5' is in your GitHub repo.")
+    if st.button("Analyze"):
+        session = load_onnx_model()
+        label, conf = predict_with_onnx(img, session)
+        st.success(f"Result: {label} ({conf:.1f}%)")
