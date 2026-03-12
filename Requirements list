@@ -1,5 +1,4 @@
 streamlit
---find-links https://download.pytorch.org/whl/cpu/torch_stable.html
-tensorflow-cpu==2.15.0
+onnxruntime
 Pillow
 numpy
